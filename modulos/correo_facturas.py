@@ -187,7 +187,7 @@ def descargar_adjuntos_gmail(usuario, password_app, etiqueta,
     log(f"Log guardado en: {ruta_log}")
 
     # 5. Preparar carpeta destino
-    carpeta_destino = Path(carpeta_destino) if carpeta_destino else _carpeta_datos() / "facturas_descargadas"
+    carpeta_destino = Path(carpeta_destino) if carpeta_destino else _carpeta_datos() / "descargas"
     carpeta_destino.mkdir(parents=True, exist_ok=True)
 
     # 6. Inicializar variables

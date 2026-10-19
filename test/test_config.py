@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Script de verificación post-refactor. Ejecutar: python3 verificar_config.py"""
+"""Script de verificación post-refactor. Ejecutar: python3 test/test_config.py"""
 import sys
 import json
 

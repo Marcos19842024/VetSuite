@@ -201,7 +201,7 @@ def sincronizar_facturas(app):
     log("PASO 1: Descargando adjuntos del correo")
     log("=" * 80)
 
-    carpeta_descargas = _CARPETA_DATOS / "facturas_descargadas"
+    carpeta_descargas = _CARPETA_DATOS / "descargas"
     if carpeta_descargas.exists():
         for f in carpeta_descargas.iterdir():
             if f.is_file():

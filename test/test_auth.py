@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-scripts/probar_auth.py
+test/test_auth.py
 Pruebas manuales de autenticación, sesión, perfiles y usuarios.
 
 Usa una carpeta temporal: NO toca el usuarios.json real.
 
 Uso:
-    python3 scripts/probar_auth.py             # todas las pruebas
-    python3 scripts/probar_auth.py --verbose   # con detalle
-    python3 scripts/probar_auth.py --solo hash # solo un grupo
+    python3 test/test_auth.py             # todas las pruebas
+    python3 test/test_auth.py --verbose   # con detalle
+    python3 test/test_auth.py --solo hash # solo un grupo
 """
 
 import argparse
