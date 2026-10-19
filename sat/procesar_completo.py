@@ -14,6 +14,7 @@ NO modifica ningun modulo existente. Solo los usa.
 
 from datetime import datetime
 from pathlib import Path
+import shutil
 
 from config.campos import MESES_ES
 from sat.guardar_egresos import (
@@ -173,6 +174,8 @@ def procesar_todo(anio, mes_idx, carpeta_xml="/tmp/sat_descargas",
         "errores_mover": 0,
         "actualizados": 0,
         "no_encontrados": 0,
+        "descartados": 0,               # ← NUEVO
+        "carpeta_descartados": None,    # ← NUEVO
         "excel": {},
     }
 
@@ -189,6 +192,27 @@ def procesar_todo(anio, mes_idx, carpeta_xml="/tmp/sat_descargas",
     resumen["movidos"] = len(movidos)
     resumen["errores_mover"] = len(errores)
     _log(f"   Movidos: {len(movidos)} | Errores: {len(errores)}")
+
+    # 3b) NUEVO: rescatar XMLs que no se pudieron mover
+    try:
+        carpeta_origen = Path(carpeta_xml)
+        sobran = list(carpeta_origen.glob("*.xml")) if carpeta_origen.exists() else []
+        if sobran:
+            descartados_dir = carpeta_origen.parent / "descartados"
+            descartados_dir.mkdir(parents=True, exist_ok=True)
+            for xml in sobran:
+                try:
+                    shutil.copy2(xml, descartados_dir / xml.name)
+                except Exception as e:
+                    _log(f"   ⚠ No se pudo copiar {xml.name}: {e}")
+            resumen["descartados"] = len(sobran)
+            resumen["carpeta_descartados"] = str(descartados_dir)
+            _log(f"   ⚠ Descartados (no se movieron): {len(sobran)}")
+            _log(f"     Guardados en: {descartados_dir}")
+        else:
+            _log("   ✓ No hay XMLs descartados")
+    except Exception as e:
+        _log(f"   ⚠ Error revisando descartados: {e}")
 
     # 4) Actualizar lineas/rutas
     _log("→ Actualizando JSON con lineas y rutas...")

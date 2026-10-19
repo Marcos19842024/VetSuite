@@ -651,6 +651,35 @@ python3 scripts/probar_egresos.py --reproducir-error <archivo>
 
 ## Historial de versiones
 
+### v2.5.0 — Descarga del SAT robusta + descartados visibles + rutas persistentes
+
+- **`dialogos/descargar_sat.py`**:
+  - Antes de solicitar, revisa `solicitud_sat_activa.json` del mismo período.
+    Si estado es 1/2 → no molesta al SAT, avisa "en proceso".
+    Si estado es 3 → deriva directo a descarga.
+    Si estado es 4/5 → limpia y permite solicitar de nuevo.
+  - Persiste el estado devuelto por `VerificaSolicitudDescarga`
+    (`estado_solicitud`, `codigo_estado_solicitud`, `numero_cfdis`,
+    `paquetes`, `ultima_verificacion`) en cada verificación.
+  - Al crear la solicitud, guarda `estado_solicitud: "1"` desde el inicio.
+  - Traduce `5002` y `5005` del SAT a mensajes claros en la UI.
+- **`modulos/egresos.py`**:
+  - `_actualizar_boton_sat()` ya no borra la solicitud a las 24 h.
+    Solo limpia cuando el estado del SAT es 4 o 5.
+- **`sat/descarga.py`**:
+  - `carpeta_destino` de `descargar_paquetes()` pasa de `/tmp/sat_descargas`
+    a `<CARPETA_DATOS>/descargas/` (dev: `egresos/descargas/`,
+    prod: `~/Documents/Vet Suite/egresos/descargas/`).
+- **`sat/procesar_completo.py`**:
+  - Nuevo: copia a `<CARPETA_DATOS>/descartados/` cualquier XML que no
+    se haya podido mover. Añade `descartados` y `carpeta_descartados`
+    al resumen.
+- **`dialogos/descargar_sat.py`** (mensaje final):
+  - El `messagebox` de "Descarga completa" menciona cuántos XMLs
+    se descartaron y dónde están.
+- **`scripts/probar_egresos.py`**:
+  - Docstring actualizado a la nueva ruta de descargas.
+
 ### v2.3.0 — Lector de facturas v3 + catálogo QVET desde Excel
 - **Reescrito `modulos/lector_facturas.py`**: el PDF es la fuente de
   productos (no el XML). El XML solo aporta cabecera.

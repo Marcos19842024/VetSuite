@@ -70,12 +70,9 @@ egresos/_mock/
 # ============================================
 # ARCHIVOS TEMPORALES DE PRUEBAS SAT
 # ============================================
-test_*.py
-test_fiel*.py
-test_sat_auth.py
-convertir_fiel.py
-ver_xml.py
-.dev_mode
+test/test_egresos.json
+test/descargas_test/
+test/xmls_test/
 
 # ============================================
 # SISTEMA Y EDITORES

@@ -9,6 +9,13 @@ Flujo:
   2. Solicitar descarga al SAT -> obtiene id_solicitud
   3. Abrir dialogos/espera_sat.py con el verificador correcto
   4. Cuando el SAT termina (estado=3), descargar paquetes y procesar
+
+v2.4.1:
+  - No se vuelve a solicitar si ya hay una solicitud vigente para el período.
+  - Se persiste el estado del SAT en solicitud_sat_activa.json tras cada
+    verificación, para que el botón del panel sepa qué mostrar.
+  - La solicitud se limpia solo cuando el SAT la declara muerta (4/5) o
+    cuando la descarga+procesamiento termina.
 """
 
 import threading
@@ -23,6 +30,9 @@ from tkinter import messagebox
 from config.campos import MESES_ES
 
 
+# ============================================================
+# DIALOGO DE SELECCION DE PERIODO
+# ============================================================
 def abrir_dialogo_descargar_sat(app):
     """
     Abre el dialogo de descarga del SAT.
@@ -173,11 +183,42 @@ def abrir_dialogo_descargar_sat(app):
 
 
 # ============================================================
+# PERSISTENCIA DEL ESTADO DEL SAT
+# ============================================================
+def _persistir_estado_sat(resultado_verif):
+    """
+    Actualiza solicitud_sat_activa.json con el estado devuelto
+    por VerificaSolicitudDescarga. Se llama después de cada
+    verificación para que _actualizar_boton_sat() del panel
+    sepa qué mostrar.
+    """
+    from config.config_egresos import (
+        cargar_solicitud_activa,
+        guardar_solicitud_activa,
+    )
+    datos = cargar_solicitud_activa() or {}
+    datos.update({
+        "estado_solicitud": str(resultado_verif.get("estado_solicitud", "")),
+        "codigo_estado_solicitud": str(
+            resultado_verif.get("codigo_estado_solicitud", "")
+        ),
+        "numero_cfdis": resultado_verif.get("numero_cfdis"),
+        "paquetes": resultado_verif.get("paquetes", []),
+        "ultima_verificacion": datetime.now().isoformat(timespec="seconds"),
+    })
+    guardar_solicitud_activa(datos)
+
+
+# ============================================================
 # LANZAR DESCARGA (solicitar -> esperar -> descargar -> procesar)
 # ============================================================
 def _lanzar_descarga(app, anio, mes_idx, mes_nombre):
     """Ejecuta el flujo de descarga en un hilo separado."""
-    from config.config_egresos import cargar_config_egresos
+    from config.config_egresos import (
+        cargar_config_egresos,
+        cargar_solicitud_activa,
+        limpiar_solicitud_activa,
+    )
 
     cfg = cargar_config_egresos()
     rfc = cfg.get("rfc_receptor", "")
@@ -185,7 +226,38 @@ def _lanzar_descarga(app, anio, mes_idx, mes_nombre):
     key = cfg.get("certificado_key", "")
     pwd = cfg.get("password_fiel", "")
 
-    # (La config ya fue validada en _descargar antes de cerrar la ventana)
+    # ── NUEVO: ¿ya hay una solicitud vigente para este período? ──
+    existente = cargar_solicitud_activa()
+    if existente and existente.get("anio") == anio \
+            and existente.get("mes_idx") == mes_idx:
+        estado = str(existente.get("estado_solicitud", ""))
+
+        if estado in ("1", "2"):
+            messagebox.showinfo(
+                "Solicitud en proceso",
+                f"Ya tienes una solicitud vigente para {mes_nombre} {anio}.\n\n"
+                "El SAT aún la está procesando. Usa '🔄 Verificar solicitud' "
+                "en unos minutos.",
+                parent=app)
+            return
+
+        if estado == "3":
+            # Ya está lista: ir directo a verificar/descargar
+            messagebox.showinfo(
+                "Descarga pendiente",
+                f"Ya hay una descarga lista para {mes_nombre} {anio}.\n\n"
+                "Se abrirá la ventana para descargarla.",
+                parent=app)
+            verificar_solicitud_pendiente(app)
+            return
+
+        if estado == "4" or estado == "5":
+            # Rechazada/vencida: podemos volver a solicitar
+            limpiar_solicitud_activa()
+
+        # Si estado == "" (JSON viejo sin campo): seguimos, la verificación
+        # decidirá en el flujo de espera.
+    # ──────────────────────────────────────────────────────────
 
     # Rango de fechas: del primer dia del mes al ultimo dia (23:59:59)
     # IMPORTANTE: el SAT NO acepta fechas futuras.
@@ -240,6 +312,8 @@ def _lanzar_descarga(app, anio, mes_idx, mes_nombre):
             "306": "Sin información para ese periodo",
             "404": "No se encontró la solicitud",
             "5000": "OK",
+            "5002": "Solicitudes agotadas para este periodo",
+            "5005": "Ya existe una solicitud vigente para este periodo",
         }
         explicacion = traduccion.get(str(cod), "Error desconocido")
 
@@ -252,16 +326,19 @@ def _lanzar_descarga(app, anio, mes_idx, mes_nombre):
             parent=app)
         return
 
-    # Guardar la solicitud activa para poder retomarla
+    # Guardar la solicitud activa para poder retomarla.
+    # NUEVO: se incluye estado_solicitud="1" para que el panel
+    # muestre "Verificar" de inmediato.
     from config.config_egresos import guardar_solicitud_activa
-    from datetime import datetime as _dt
     guardar_solicitud_activa({
         "id_solicitud": id_solicitud,
         "rfc": rfc,
         "anio": anio,
         "mes_idx": mes_idx,
         "mes_nombre": mes_nombre,
-        "fecha_solicitud": _dt.now().isoformat(timespec="seconds"),
+        "fecha_solicitud": datetime.now().isoformat(timespec="seconds"),
+        "estado_solicitud": "1",
+        "paquetes": [],
     })
 
     # 2) Abrir ventana de espera con el verificador
@@ -269,7 +346,9 @@ def _lanzar_descarga(app, anio, mes_idx, mes_nombre):
     from sat.descarga import verificar_solicitud
 
     def _verificador():
-        return verificar_solicitud(cer, key, pwd, rfc, id_solicitud)
+        res = verificar_solicitud(cer, key, pwd, rfc, id_solicitud)
+        _persistir_estado_sat(res)   # ← NUEVO
+        return res
 
     def _on_completado(resultado_verif):
         paquetes = resultado_verif.get("paquetes", [])
@@ -281,14 +360,20 @@ def _lanzar_descarga(app, anio, mes_idx, mes_nombre):
     abrir_ventana_espera_sat(app, _verificador, on_completado=_on_completado)
 
 
-def _descargar_y_procesar(app, cer, key, pwd, rfc, paquetes, anio, mes_idx, id_solicitud=None):
+# ============================================================
+# DESCARGA + PROCESAMIENTO
+# ============================================================
+def _descargar_y_procesar(app, cer, key, pwd, rfc, paquetes, anio, mes_idx,
+                          id_solicitud=None):
     """Descarga paquetes y procesa todo. Se ejecuta en hilo."""
     def _worker():
         try:
             from sat.descarga import descargar_paquetes
 
             # Descargar
-            carpeta_destino = "/tmp/sat_descargas"
+            from core.rutas_egresos import CARPETA_DATOS
+            carpeta_destino = str(Path(CARPETA_DATOS) / "descargas")
+            Path(carpeta_destino).mkdir(parents=True, exist_ok=True)
             descargar_paquetes(
                 cer, key, pwd, rfc, paquetes,
                 carpeta_destino=carpeta_destino,
@@ -390,7 +475,9 @@ def verificar_solicitud_pendiente(app):
     from sat.descarga import verificar_solicitud
 
     def _verificador():
-        return verificar_solicitud(cer, key, pwd, rfc, id_solicitud)
+        res = verificar_solicitud(cer, key, pwd, rfc, id_solicitud)
+        _persistir_estado_sat(res)   # ← NUEVO
+        return res
 
     def _on_completado(resultado_verif):
         paquetes = resultado_verif.get("paquetes", [])

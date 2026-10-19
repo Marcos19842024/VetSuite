@@ -217,8 +217,13 @@ def verificar_solicitud(ruta_cer, ruta_key, password, rfc, id_solicitud):
 # DESCARGAR PAQUETES
 # ============================================================
 def descargar_paquetes(ruta_cer, ruta_key, password, rfc,
-                       paquetes, carpeta_destino="/tmp/sat_descargas",
-                       id_solicitud=None):  # ← NUEVO
+                       paquetes, carpeta_destino=None,
+                       id_solicitud=None):
+    from core.rutas_egresos import CARPETA_DATOS
+    if carpeta_destino is None:
+        carpeta_destino = Path(CARPETA_DATOS) / "descargas"
+    carpeta_destino = Path(carpeta_destino)
+    carpeta_destino.mkdir(parents=True, exist_ok=True)
     """Descarga los paquetes (ZIP) y extrae los XML."""
     fiel = _cargar_fiel(ruta_cer, ruta_key, password)
     token = Autenticacion(fiel).obtener_token()
@@ -284,7 +289,7 @@ def descargar_paquetes(ruta_cer, ruta_key, password, rfc,
 # ============================================================
 def flujo_completo(ruta_cer, ruta_key, password, rfc,
                    fecha_inicio, fecha_fin,
-                   carpeta_destino="/tmp/sat_descargas",
+                   carpeta_destino=None,
                    tipo_solicitud="CFDI",
                    callback_estado=None):
     """Flujo completo: solicita -> (espera externa) -> descarga."""

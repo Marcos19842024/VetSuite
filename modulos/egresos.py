@@ -508,12 +508,26 @@ class PanelEgresos(ttk.Frame):
         self.after(2000, self._actualizar_boton_sat)
 
     def _actualizar_boton_sat(self):
+        """
+        Decide si mostrar 'Descargar' o 'Verificar' según el estado real
+        de la solicitud guardada.
+
+        Reglas:
+          - Si hay solicitud con estado 1 o 2 (aceptada/en proceso): verificar.
+          - Si hay solicitud con estado 3 (terminada): verificar (para descargar).
+          - Si hay solicitud sin estado (versión vieja del JSON): verificar.
+          - Si hay solicitud con estado 4 o 5 (rechazada/vencida): limpiar y descargar.
+          - Sin solicitud: descargar.
+        """
         datos = cargar_solicitud_activa()
         if datos:
-            horas = horas_desde_solicitud(datos)
-            if horas is not None and horas > 24:
+            estado = str(datos.get("estado_solicitud", ""))
+
+            # Solo limpiamos si el SAT ya nos dijo que está muerta
+            if estado in ("4", "5"):
                 limpiar_solicitud_activa()
                 datos = None
+            # estados "1", "2", "3" o "" (vacío, JSON viejo) → se mantiene
 
         for w in self._btn_sat_frame.winfo_children():
             w.pack_forget()

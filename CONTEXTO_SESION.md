@@ -1,3 +1,14 @@
+# Sesión de trabajo — 2026-10-18 (v2.5.0)
+
+## Resumen
+Se corrigió el flujo de descarga del SAT para que no se vuelva a
+solicitar un período cuando ya hay una solicitud vigente, se persistió
+el estado del SAT en `solicitud_sat_activa.json` para que la UI sepa
+qué botón mostrar, y se movió la carpeta de trabajo de `/tmp/sat_descargas`
+a `<CARPETA_DATOS>/descargas/`. Además, los XMLs que no se pueden mover
+ahora se copian a `<CARPETA_DATOS>/descartados/` y se reportan en el
+resumen final.
+
 # Sesión de trabajo — 2026-10-15 (v2.3.0)
 
 ## Resumen
