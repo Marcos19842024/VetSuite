@@ -116,6 +116,34 @@ class PanelEgresos(ttk.Frame):
         botones = ttk.Frame(self, padding=(10, 5))
         botones.pack(fill="x", padx=10)
 
+        # ---- Panel de solicitud SAT actual ----
+        self._frame_sat = ttk.LabelFrame(self, text="Solicitud SAT actual", padding=5)
+        self._frame_sat.pack(fill="x", padx=10, pady=(0, 5))
+
+        cols_sat = ("periodo", "estado", "cfdi", "ultima", "acciones")
+        self._tabla_sat = ttk.Treeview(
+            self._frame_sat, columns=cols_sat, show="headings", height=1,
+        )
+        for c, txt, w in (
+            ("periodo", "Período", 110),
+            ("estado", "Estado", 200),
+            ("cfdi", "CFDI", 80),
+            ("ultima", "Últ. verificación", 150),
+            ("acciones", "Acciones", 130),
+        ):
+            self._tabla_sat.heading(c, text=txt)
+            self._tabla_sat.column(c, width=w, anchor="center")
+        self._tabla_sat.pack(fill="x")
+
+        self._lbl_sat_sin = ttk.Label(
+            self._frame_sat,
+            text="No hay solicitud activa.",
+            foreground="gray",
+        )
+        self._lbl_sat_sin.pack(anchor="w")
+
+        self._refrescar_tabla_sat()
+
         # Frame dinamico: descargar / verificar
         self._btn_sat_frame = ttk.Frame(botones)
         self._btn_sat_frame.pack(side="left", padx=3)
@@ -240,6 +268,61 @@ class PanelEgresos(ttk.Frame):
         self.var_sucursal.trace_add("write", lambda *a: self._refrescar_tabla())
         self.var_filtro_metodo.trace_add("write", lambda *a: self._refrescar_tabla())
         self.var_filtro_forma.trace_add("write", lambda *a: self._refrescar_tabla())
+        self._tabla_sat.bind("<Double-Button-1>", self._al_seleccionar_sat)
+
+    # ============================================================
+    # TABLA DE SOLICITUD SAT
+    # ============================================================
+    def _refrescar_tabla_sat(self):
+        """Pinta la fila de la solicitud activa (o el mensaje de vacío)."""
+        for i in self._tabla_sat.get_children():
+            self._tabla_sat.delete(i)
+
+        datos = cargar_solicitud_activa()
+        if not datos:
+            self._lbl_sat_sin.pack(anchor="w")
+            self._tabla_sat.pack_forget()
+            return
+
+        self._lbl_sat_sin.pack_forget()
+        self._tabla_sat.pack(fill="x")
+
+        periodo = f"{datos.get('mes_nombre', '?')} {datos.get('anio', '?')}"
+        estado_cod = str(datos.get("estado_solicitud", ""))
+        estado_txt = {
+            "":   "Sin verificar",
+            "1":  "Aceptada (en cola)",
+            "2":  "En proceso",
+            "3":  "Lista para descargar",
+            "4":  "Rechazada",
+            "5":  "Vencida",
+        }.get(estado_cod, f"Código {estado_cod}")
+
+        cfdi = datos.get("numero_cfdis") or "—"
+        ultima = datos.get("ultima_verificacion", "—")
+        if "T" in str(ultima):
+            ultima = str(ultima).replace("T", " ")[:16]
+
+        accion = "Descargar" if estado_cod == "3" else "Verificar"
+
+        self._tabla_sat.insert(
+            "", "end",
+            values=(periodo, estado_txt, cfdi, ultima, accion),
+        )
+
+    def _al_seleccionar_sat(self, event=None):
+        """Al hacer doble clic en la fila: verificar o descargar según estado."""
+        datos = cargar_solicitud_activa()
+        if not datos:
+            return
+        if str(datos.get("estado_solicitud", "")) == "3":
+            self._verificar_solicitud()   # descarga directa
+        else:
+            self._verificar_solicitud()   # vuelve a verificar estado
+
+    def _al_verificar_sat(self):
+        """Botón 'Verificar' de la fila de la solicitud."""
+        self._verificar_solicitud()
 
     def _crear_menu_contextual(self):
         self.menu_ctx = tk.Menu(self, tearoff=0)
@@ -537,6 +620,8 @@ class PanelEgresos(ttk.Frame):
         else:
             self._btn_descargar.pack()
 
+        self._refrescar_tabla_sat()
+
     def _clasificar_sucursal(self):
         try:
             anio = int(self.var_anio.get())
@@ -546,6 +631,7 @@ class PanelEgresos(ttk.Frame):
         from dialogos.clasificar_sucursal import abrir_dialogo_clasificar_sucursal
         abrir_dialogo_clasificar_sucursal(self, anio=anio)
         self._refrescar_tabla()
+        self._refrescar_tabla_sat()
 
     def _ver_reportes(self):
         from dialogos.reportes_egresos import abrir_dialogo_reportes_egresos
