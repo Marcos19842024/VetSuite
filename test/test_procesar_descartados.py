@@ -102,7 +102,7 @@ def inspeccionar(ruta_xml: Path, anio: int) -> dict:
     forma_cod = str(factura.get("forma_pago") or "").strip()
     info["forma_codigo"] = forma_cod
     info["forma_nombre"] = FORMAS.get(forma_cod, "?")
-    info["duplicado"] = _uuid_esta_en_json(info["uuid"], anio)
+    info["duplicado"] = _uuid_esta_en_json(info["uuid"], anio) # type: ignore
 
     if info["duplicado"]:
         info["categoria"] = "DUPLICADO"
@@ -209,7 +209,7 @@ def _mover_xml_y_actualizar(factura: dict, xml_origen: Path, metodo: str, forma:
     nuevo_id = max((r.get("id", 0) for r in registros), default=0) + 1
     factura["id"] = nuevo_id
     factura["anio"] = anio_f
-    factura["mes"] = MESES_ES[mes_f - 1] if 'MESES_ES' in globals() else _mes_nombre(mes_f)
+    factura["mes"] = MESES_ES[mes_f - 1] if 'MESES_ES' in globals() else _mes_nombre(mes_f) # type: ignore
 
     # Establecer ruta_xml temporal para que mover_un_registro lo encuentre
     factura["ruta_xml"] = str(xml_origen)

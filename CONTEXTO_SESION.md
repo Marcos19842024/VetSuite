@@ -1,3 +1,15 @@
+# Sesión de trabajo — 2026-10-20 (v2.5.0)
+
+## Resumen
+Se reforzó el flujo de descarga del SAT para que la app no vuelva a
+solicitar un período cuando ya hay una solicitud vigente, se persistió
+el estado del SAT en `solicitud_sat_activa.json`, y se movió la carpeta
+de trabajo de `/tmp/sat_descargas` a `<CARPETA_DATOS>/descargas/`.
+Además, los XMLs que no se pueden mover ahora se copian a
+`<CARPETA_DATOS>/descartados/` y se reportan en el resumen final.
+Se agregó `scripts/procesar_descartados.py` para recuperar, clasificar
+y procesar manualmente los XMLs descartados.
+
 # Sesión de trabajo — 2026-10-18 (v2.5.0)
 
 ## Resumen
