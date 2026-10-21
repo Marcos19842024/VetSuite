@@ -5,17 +5,19 @@ Dialogo para elegir el periodo de descarga del SAT y ejecutar
 el flujo completo (solicitar -> esperar -> descargar -> procesar).
 
 Flujo:
-  1. Pedir mes/año al usuario
+  1. Pedir fechas (desde/hasta) al usuario
   2. Solicitar descarga al SAT -> obtiene id_solicitud
   3. Abrir dialogos/espera_sat.py con el verificador correcto
   4. Cuando el SAT termina (estado=3), descargar paquetes y procesar
 
-v2.4.1:
-  - No se vuelve a solicitar si ya hay una solicitud vigente para el período.
-  - Se persiste el estado del SAT en solicitud_sat_activa.json tras cada
-    verificación, para que el botón del panel sepa qué mostrar.
-  - La solicitud se limpia solo cuando el SAT la declara muerta (4/5) o
-    cuando la descarga+procesamiento termina.
+v3.1.0:
+  - Fechas libres (DateEntry) en lugar de solo mes/año.
+  - Validaciones: rango <= 365 días, inicio <= fin, no fechas futuras.
+  - Atajos: "Mes actual" y "Mes anterior" rellenan el mes completo.
+  - Se guarda fecha_inicio/fecha_fin en solicitud_sat_activa.json
+    (compatible con anio/mes_idx para verificar_solicitud_pendiente).
+  - Aviso si el rango cruza de mes (porque procesar_todo usa el mes
+    del primer día).
 """
 
 import threading
@@ -28,6 +30,14 @@ import ttkbootstrap as ttk
 from tkinter import messagebox
 
 from config.campos import MESES_ES
+
+
+# ============================================================
+# HELPERS
+# ============================================================
+def _ultimo_dia(anio: int, mes: int) -> int:
+    from calendar import monthrange
+    return monthrange(anio, mes)[1]
 
 
 # ============================================================
@@ -44,15 +54,12 @@ def abrir_dialogo_descargar_sat(app):
     """
     from ui.utils import configurar_ventana
 
-    # Valores por defecto: mes y año actuales
     hoy = datetime.now()
-    mes_default = MESES_ES[hoy.month - 1]
-    anio_default = str(hoy.year)
 
     ventana = ttk.Toplevel(app)
     ventana.title("📥 Descargar del SAT")
-    configurar_ventana(app, ventana, ancho=450, alto=350,
-                       min_ancho=400, min_alto=300)
+    configurar_ventana(app, ventana, ancho=480, alto=430,
+                       min_ancho=430, min_alto=380)
 
     # Encabezado
     ttk.Label(
@@ -64,34 +71,88 @@ def abrir_dialogo_descargar_sat(app):
     ttk.Label(
         ventana,
         text="Descarga los CFDI recibidos (facturas de compra)\n"
-             "del periodo seleccionado.",
+             "del rango de fechas seleccionado.",
         font=("Segoe UI", 9),
         foreground="gray",
         justify="center",
-    ).pack(pady=(0, 20))
+    ).pack(pady=(0, 15))
 
-    # Formulario
+    try:
+        from ttkbootstrap import DateEntry
+        _usar_dateentry = True
+    except ImportError:
+        DateEntry = None
+        _usar_dateentry = False
+
+    # ---- Formulario ----
     form = ttk.Frame(ventana)
-    form.pack(fill="x", padx=30, pady=10)
+    form.pack(fill="x", padx=30, pady=5)
 
-    ttk.Label(form, text="Año:").grid(
+    ttk.Label(form, text="Desde:").grid(
         row=0, column=0, sticky="e", padx=(0, 10), pady=8)
-    var_anio = tk.StringVar(value=anio_default)
-    ttk.Entry(form, textvariable=var_anio, width=8).grid(
-        row=0, column=1, sticky="w", pady=8)
-
-    ttk.Label(form, text="Mes:").grid(
+    ttk.Label(form, text="Hasta:").grid(
         row=1, column=0, sticky="e", padx=(0, 10), pady=8)
-    var_mes = tk.StringVar(value=mes_default)
-    ttk.Combobox(
-        form,
-        textvariable=var_mes,
-        values=MESES_ES,
-        width=15,
-        state="readonly",
-    ).grid(row=1, column=1, sticky="w", pady=8)
 
-    # Nota
+    fecha_ini_default = datetime(hoy.year, hoy.month, 1)
+    fecha_fin_default = hoy
+
+    # ttkbootstrap.DateEntry: dateformat (no date_pattern), startdate (no year/month/day)
+    entry_ini = ttk.DateEntry(
+        form, width=14,
+        dateformat="%Y-%m-%d",
+        startdate=fecha_ini_default,
+    )
+    entry_fin = ttk.DateEntry(
+        form, width=14,
+        dateformat="%Y-%m-%d",
+        startdate=fecha_fin_default,
+    )
+    entry_ini.grid(row=0, column=1, sticky="w", pady=8)
+    entry_fin.grid(row=1, column=1, sticky="w", pady=8)
+
+    # ---- Atajos ----
+    atajos = ttk.Frame(ventana)
+    atajos.pack(fill="x", padx=30, pady=(0, 10))
+
+    def _set_fecha(entry: ttk.DateEntry, fecha: datetime):
+        """ttkbootstrap.DateEntry no tiene set_date().
+        Hay que reescribir el Entry interno."""
+        entry.entry.delete(0, "end")
+        entry.entry.insert(0, fecha.strftime("%Y-%m-%d"))
+
+    def _get_fecha(entry: ttk.DateEntry) -> datetime:
+        """ttkbootstrap.DateEntry no tiene get_date().
+        Hay que leer el Entry interno y parsear."""
+        texto = entry.entry.get().strip()
+        if not texto:
+            raise ValueError("Fecha vacía")
+        return datetime.strptime(texto, "%Y-%m-%d")
+
+    def _mes_completo(anio_m, mes_m):
+        ultimo = _ultimo_dia(anio_m, mes_m)
+        _set_fecha(entry_ini, datetime(anio_m, mes_m, 1))
+        _set_fecha(entry_fin, datetime(anio_m, mes_m, ultimo, 23, 59, 59))
+
+    ttk.Button(
+        atajos, text="Mes actual",
+        command=lambda: _mes_completo(hoy.year, hoy.month),
+        bootstyle="secondary-outline",
+    ).pack(side="left", padx=3)
+
+    if hoy.month > 1:
+        mes_ant = hoy.month - 1
+        anio_ant = hoy.year
+    else:
+        mes_ant = 12
+        anio_ant = hoy.year - 1
+
+    ttk.Button(
+        atajos, text=f"Mes anterior ({MESES_ES[mes_ant - 1]})",
+        command=lambda: _mes_completo(anio_ant, mes_ant),
+        bootstyle="secondary-outline",
+    ).pack(side="left", padx=3)
+
+    # ---- Nota ----
     ttk.Label(
         ventana,
         text="⚠️ La descarga puede tardar varios minutos.\n"
@@ -99,9 +160,9 @@ def abrir_dialogo_descargar_sat(app):
         font=("Segoe UI", 8),
         foreground="gray",
         justify="center",
-    ).pack(pady=(15, 10))
+    ).pack(pady=(10, 10))
 
-    # Botón para configurar e.firma
+    # ---- Botón para configurar e.firma ----
     def _abrir_config():
         from dialogos.egresos_config import abrir_dialogo_config_egresos
         abrir_dialogo_config_egresos(app)
@@ -109,31 +170,57 @@ def abrir_dialogo_descargar_sat(app):
     resultado = {"ok": False}
 
     def _descargar():
-        anio_txt = var_anio.get().strip()
-        mes_nombre = var_mes.get()
+        try:
+            ini = _get_fecha(entry_ini)
+            fin = _get_fecha(entry_fin)
+            fecha_inicio = datetime(ini.year, ini.month, ini.day, 0, 0, 0)
+            fecha_fin = datetime(fin.year, fin.month, fin.day, 23, 59, 59)
+        except ValueError as e:
+            messagebox.showwarning(
+                "Fecha inválida",
+                f"Usa el formato YYYY-MM-DD (ej. 2026-08-01).\n\n{e}",
+                parent=ventana)
+            return
 
         # Validaciones
-        try:
-            anio = int(anio_txt)
-            if anio < 2020 or anio > 2100:
-                raise ValueError()
-        except ValueError:
+        if fecha_fin < fecha_inicio:
             messagebox.showwarning(
-                "Año inválido",
-                "Ingresa un año válido (ej. 2026).",
+                "Rango inválido",
+                "La fecha 'Hasta' no puede ser menor que 'Desde'.",
                 parent=ventana)
             return
 
-        if mes_nombre not in MESES_ES:
+        if (fecha_fin - fecha_inicio).days > 365:
             messagebox.showwarning(
-                "Mes inválido",
-                "Selecciona un mes válido.",
+                "Rango demasiado largo",
+                "El SAT no acepta rangos mayores a 1 año.",
                 parent=ventana)
             return
 
-        mes_idx = MESES_ES.index(mes_nombre) + 1
+        hoy_dt = datetime.now()
+        if fecha_inicio > hoy_dt:
+            messagebox.showwarning(
+                "Fecha futura",
+                "No puedes solicitar fechas futuras.",
+                parent=ventana)
+            return
 
-        # ⚠️ VALIDAR CONFIG ANTES de cerrar la ventana
+        if fecha_fin > hoy_dt:
+            fecha_fin = hoy_dt.replace(hour=23, minute=59, second=59)
+
+        # Aviso si cruza de mes
+        if fecha_inicio.month != fecha_fin.month or \
+                fecha_inicio.year != fecha_fin.year:
+            if not messagebox.askyesno(
+                "El rango cruza de mes",
+                "El rango seleccionado cruza de mes.\n\n"
+                "Las facturas se procesarán con el mes del primer día "
+                f"({MESES_ES[fecha_inicio.month - 1]} {fecha_inicio.year}).\n\n"
+                "¿Continuar?",
+                parent=ventana):
+                return
+
+        # Validar config ANTES de cerrar
         from config.config_egresos import cargar_config_egresos
         cfg = cargar_config_egresos()
         rfc = cfg.get("rfc_receptor", "")
@@ -149,11 +236,10 @@ def abrir_dialogo_descargar_sat(app):
                 parent=ventana)
             return
 
-        # Ahora sí, cerrar y lanzar
         resultado["ok"] = True
         ventana.destroy()
 
-        _lanzar_descarga(app, anio, mes_idx, mes_nombre)
+        _lanzar_descarga(app, fecha_inicio, fecha_fin)
 
     def _cancelar():
         ventana.destroy()
@@ -212,7 +298,7 @@ def _persistir_estado_sat(resultado_verif):
 # ============================================================
 # LANZAR DESCARGA (solicitar -> esperar -> descargar -> procesar)
 # ============================================================
-def _lanzar_descarga(app, anio, mes_idx, mes_nombre):
+def _lanzar_descarga(app, fecha_inicio: datetime, fecha_fin: datetime):
     """Ejecuta el flujo de descarga en un hilo separado."""
     from config.config_egresos import (
         cargar_config_egresos,
@@ -226,64 +312,53 @@ def _lanzar_descarga(app, anio, mes_idx, mes_nombre):
     key = cfg.get("certificado_key", "")
     pwd = cfg.get("password_fiel", "")
 
-    # ── NUEVO: ¿ya hay una solicitud vigente para este período? ──
+    # ── ¿Ya hay una solicitud vigente para el mismo rango? ──
     existente = cargar_solicitud_activa()
-    if existente and existente.get("anio") == anio \
-            and existente.get("mes_idx") == mes_idx:
-        estado = str(existente.get("estado_solicitud", ""))
+    if existente:
+        ini_guardada = existente.get("fecha_inicio")
+        fin_guardada = existente.get("fecha_fin")
+        ini_nueva = fecha_inicio.date().isoformat()
+        fin_nueva = fecha_fin.date().isoformat()
 
-        if estado in ("1", "2"):
-            messagebox.showinfo(
-                "Solicitud en proceso",
-                f"Ya tienes una solicitud vigente para {mes_nombre} {anio}.\n\n"
-                "El SAT aún la está procesando. Usa '🔄 Verificar solicitud' "
-                "en unos minutos.",
-                parent=app)
-            return
+        mismo_rango = (ini_guardada == ini_nueva and fin_guardada == fin_nueva)
 
-        if estado == "3":
-            # Ya está lista: ir directo a verificar/descargar
-            messagebox.showinfo(
-                "Descarga pendiente",
-                f"Ya hay una descarga lista para {mes_nombre} {anio}.\n\n"
-                "Se abrirá la ventana para descargarla.",
-                parent=app)
-            verificar_solicitud_pendiente(app)
-            return
+        # Compatibilidad con formato viejo (solo anio/mes_idx)
+        mismo_mes_viejo = False
+        if existente.get("anio") == fecha_inicio.year \
+                and existente.get("mes_idx") == fecha_inicio.month:
+            if (ini_nueva.endswith("-01")
+                    and fin_nueva == f"{fecha_inicio.year}-"
+                                    f"{fecha_inicio.month:02d}-"
+                                    f"{_ultimo_dia(fecha_inicio.year, fecha_inicio.month):02d}"):
+                mismo_mes_viejo = True
 
-        if estado == "4" or estado == "5":
-            # Rechazada/vencida: podemos volver a solicitar
-            limpiar_solicitud_activa()
+        if mismo_rango or mismo_mes_viejo:
+            estado = str(existente.get("estado_solicitud", ""))
 
-        # Si estado == "" (JSON viejo sin campo): seguimos, la verificación
-        # decidirá en el flujo de espera.
-    # ──────────────────────────────────────────────────────────
+            if estado in ("1", "2"):
+                messagebox.showinfo(
+                    "Solicitud en proceso",
+                    "Ya tienes una solicitud vigente para este período.\n\n"
+                    "El SAT aún la está procesando. Usa '🔄 Verificar solicitud' "
+                    "en unos minutos.",
+                    parent=app)
+                return
 
-    # Rango de fechas: del primer dia del mes al ultimo dia (23:59:59)
-    # IMPORTANTE: el SAT NO acepta fechas futuras.
-    from calendar import monthrange
+            if estado == "3":
+                messagebox.showinfo(
+                    "Descarga pendiente",
+                    "Ya hay una descarga lista para este período.\n\n"
+                    "Se abrirá la ventana para descargarla.",
+                    parent=app)
+                verificar_solicitud_pendiente(app)
+                return
 
-    fecha_inicio = datetime(anio, mes_idx, 1, 0, 0, 0)
+            if estado in ("4", "5"):
+                limpiar_solicitud_activa()
 
-    ultimo_dia = monthrange(anio, mes_idx)[1]
-    fecha_fin = datetime(anio, mes_idx, ultimo_dia, 23, 59, 59)
-
-    # Si el mes es el actual, recortar a HOY (23:59:59)
-    hoy = datetime.now()
-    if anio == hoy.year and mes_idx == hoy.month:
-        fecha_fin = hoy.replace(hour=23, minute=59, second=59)
-
-    # Si el rango queda en el futuro, avisar
-    if fecha_inicio > hoy:
-        messagebox.showwarning(
-            "Fechas invalidas",
-            f"No se puede descargar {mes_nombre} {anio} porque aun no ha pasado.",
-            parent=app)
-        return
-
+    # ── Solicitar ──
     from sat.descarga import solicitar_descarga
 
-    # 1) Solicitar
     try:
         resultado = solicitar_descarga(
             cer, key, pwd, rfc,
@@ -298,11 +373,9 @@ def _lanzar_descarga(app, anio, mes_idx, mes_nombre):
 
     id_solicitud = resultado.get("id_solicitud")
     if not id_solicitud:
-        # El SAT rechazó la solicitud. Mostrar motivo real.
         cod = resultado.get("cod_estatus", "?")
         msg = resultado.get("mensaje", "Sin mensaje")
 
-        # Traducir los códigos más comunes
         traduccion = {
             "301": "XML mal formado (revisa fechas o RFC)",
             "302": "RFC no válido o sin permisos",
@@ -326,28 +399,32 @@ def _lanzar_descarga(app, anio, mes_idx, mes_nombre):
             parent=app)
         return
 
-    # Guardar la solicitud activa para poder retomarla.
-    # NUEVO: se incluye estado_solicitud="1" para que el panel
-    # muestre "Verificar" de inmediato.
+    # ── Guardar la solicitud activa ──
     from config.config_egresos import guardar_solicitud_activa
     guardar_solicitud_activa({
         "id_solicitud": id_solicitud,
         "rfc": rfc,
-        "anio": anio,
-        "mes_idx": mes_idx,
-        "mes_nombre": mes_nombre,
+        "fecha_inicio": fecha_inicio.date().isoformat(),
+        "fecha_fin": fecha_fin.date().isoformat(),
+        # Compatibilidad con verificar_solicitud_pendiente
+        "anio": fecha_inicio.year,
+        "mes_idx": fecha_inicio.month,
+        "mes_nombre": MESES_ES[fecha_inicio.month - 1],
         "fecha_solicitud": datetime.now().isoformat(timespec="seconds"),
         "estado_solicitud": "1",
         "paquetes": [],
     })
 
-    # 2) Abrir ventana de espera con el verificador
+    # ── Abrir ventana de espera ──
     from dialogos.espera_sat import abrir_ventana_espera_sat
     from sat.descarga import verificar_solicitud
 
+    anio = fecha_inicio.year
+    mes_idx = fecha_inicio.month
+
     def _verificador():
         res = verificar_solicitud(cer, key, pwd, rfc, id_solicitud)
-        _persistir_estado_sat(res)   # ← NUEVO
+        _persistir_estado_sat(res)
         return res
 
     def _on_completado(resultado_verif):
@@ -369,11 +446,12 @@ def _descargar_y_procesar(app, cer, key, pwd, rfc, paquetes, anio, mes_idx,
     def _worker():
         try:
             from sat.descarga import descargar_paquetes
+            from core.rutas_egresos import CARPETA_DATOS
 
             # Descargar
-            from core.rutas_egresos import CARPETA_DATOS
             carpeta_destino = str(Path(CARPETA_DATOS) / "descargas")
             Path(carpeta_destino).mkdir(parents=True, exist_ok=True)
+
             descargar_paquetes(
                 cer, key, pwd, rfc, paquetes,
                 carpeta_destino=carpeta_destino,
@@ -393,21 +471,33 @@ def _descargar_y_procesar(app, cer, key, pwd, rfc, paquetes, anio, mes_idx,
                     num_xmls=resumen.get("nuevas", 0) + resumen.get("duplicadas", 0),
                 )
 
-            # Limpiar la solicitud activa (ya terminó todo)
+            # Limpiar la solicitud activa
             from config.config_egresos import limpiar_solicitud_activa
             limpiar_solicitud_activa()
 
             # Mostrar resumen
             def _mostrar():
-                messagebox.showinfo(
-                    "Descarga completa",
+                msg = (
                     f"✅ Descarga y procesamiento exitosos\n\n"
                     f"Facturas nuevas: {resumen['nuevas']}\n"
                     f"Duplicadas: {resumen['duplicadas']}\n"
-                    f"XMLs movidos: {resumen['movidos']}\n\n"
-                    f"Revisa los registros y usa '📊 Generar Excel'\n"
-                    f"cuando termines.",
-                    parent=app)
+                    f"XMLs movidos: {resumen['movidos']}\n"
+                )
+                descartados = resumen.get("descartados", 0)
+                if descartados > 0:
+                    msg += f"\n⚠ Descartados (no se movieron): {descartados}\n"
+                    carpeta_desc = resumen.get("carpeta_descartados")
+                    if carpeta_desc:
+                        msg += f"   Guardados en:\n   {carpeta_desc}\n"
+                    msg += (
+                        "\nRevisa esa carpeta antes de borrarla: "
+                        "puede haber facturas que necesites registrar a mano."
+                    )
+                msg += (
+                    f"\n\nRevisa los registros y usa '📊 Generar Excel'\n"
+                    f"cuando termines."
+                )
+                messagebox.showinfo("Descarga completa", msg, parent=app)
             app.after(0, _mostrar)
 
         except Exception as e:
@@ -476,7 +566,7 @@ def verificar_solicitud_pendiente(app):
 
     def _verificador():
         res = verificar_solicitud(cer, key, pwd, rfc, id_solicitud)
-        _persistir_estado_sat(res)   # ← NUEVO
+        _persistir_estado_sat(res)
         return res
 
     def _on_completado(resultado_verif):

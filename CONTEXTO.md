@@ -651,6 +651,16 @@ python3 scripts/probar_egresos.py --reproducir-error <archivo>
 
 ## Historial de versiones
 
+### v3.1.0 — Descarga del SAT con fechas libres
+- `dialogos/descargar_sat.py`: el diálogo de descarga ahora acepta
+  un rango de fechas libre (desde/hasta) en lugar de solo mes/año.
+  Usa `ttkbootstrap.DateEntry`. Validaciones: rango ≤ 365 días,
+  inicio ≤ fin, no fechas futuras. Atajos "Mes actual" y "Mes anterior".
+- Si el rango cruza de mes, se avisa al usuario y se procesa con el
+  mes del primer día (limitación conocida de `procesar_todo`).
+- `solicitud_sat_activa.json` ahora guarda `fecha_inicio` y `fecha_fin`
+  además de `anio`/`mes_idx` (compatibilidad con `verificar_solicitud_pendiente`).
+
 ### v2.5.0 — Descarga del SAT robusta + descartados procesables
 
 - **`dialogos/descargar_sat.py`**:

@@ -1,3 +1,12 @@
+# Sesión de trabajo — 2026-10-21 (v3.1.0)
+
+## Resumen
+Se reemplazó el selector mes/año del diálogo de descarga del SAT por
+un rango de fechas libre (desde/hasta) usando `ttkbootstrap.DateEntry`.
+Se agregaron validaciones (rango ≤ 365 días, inicio ≤ fin, no futuras)
+y atajos "Mes actual" / "Mes anterior". Si el rango cruza de mes, se
+avisa y se procesa con el mes del primer día.
+
 # Sesión de trabajo — 2026-10-20 (v2.5.0)
 
 ## Resumen
