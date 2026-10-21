@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """Script de verificación post-refactor. Ejecutar: python3 test/test_config.py"""
+from pathlib import Path
 import sys
 import json
 
@@ -153,9 +154,9 @@ try:
         raise RuntimeError("admin no está en la lista de perfiles")
 
     admin = perfil_por_id(ADMIN_ID)
-    if admin.modulos != "*":
+    if admin.modulos != "*": # type: ignore
         raise RuntimeError(f"admin debe ver todos los módulos, "
-                            f"tiene {admin.modulos!r}")
+                            f"tiene {admin.modulos!r}") # type: ignore
 
     # Validación: cada módulo referenciado existe en el registro
     ids_modulos = {m.id for m in MODULOS}

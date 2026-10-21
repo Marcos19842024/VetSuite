@@ -56,7 +56,7 @@ def abrir_dialogo_descargar_sat(app):
 
     hoy = datetime.now()
 
-    ventana = ttk.Toplevel(app)
+    ventana = ttk.Toplevel(app.winfo_toplevel())
     ventana.title("📥 Descargar del SAT")
     configurar_ventana(app, ventana, ancho=480, alto=430,
                        min_ancho=430, min_alto=380)
