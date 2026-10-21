@@ -132,6 +132,7 @@ def _leer_excel_qvet(ruta):
     wb = openpyxl.load_workbook(ruta, data_only=True, read_only=True)
     ws = wb.active
 
+    assert ws is not None
     filas = list(ws.iter_rows(values_only=True))
     if not filas:
         raise ValueError("El archivo está vacío.")
@@ -1007,7 +1008,7 @@ class PanelIngresos(ttk.Frame):
     @staticmethod
     def _abrir_carpeta(ruta):
         if sys.platform.startswith("win"):
-            os.startfile(str(ruta))
+            os.startfile(str(ruta)) # type: ignore
         elif sys.platform == "darwin":
             os.system(f'open "{ruta}"')
         else:
@@ -1016,7 +1017,7 @@ class PanelIngresos(ttk.Frame):
     @staticmethod
     def _abrir_archivo(ruta):
         if sys.platform.startswith("win"):
-            os.startfile(str(ruta))
+            os.startfile(str(ruta)) # type: ignore
         elif sys.platform == "darwin":
             os.system(f'open "{ruta}"')
         else:
@@ -1203,7 +1204,7 @@ class PanelIngresos(ttk.Frame):
 # ================================================================
 class AppIngresos(ttk.Toplevel):
     def __init__(self, master=None):
-        super().__init__(master)
+        super().__init__(master) # type: ignore
         self.title("Vet Suite — Ingresos")
         self.geometry("1300x880")
         self.minsize(1050, 700)

@@ -613,7 +613,7 @@ class PanelEgresos(ttk.Frame):
             # estados "1", "2", "3" o "" (vacío, JSON viejo) → se mantiene
 
         for w in self._btn_sat_frame.winfo_children():
-            w.pack_forget()
+            w.pack_forget() # type: ignore
 
         if datos:
             self._btn_verificar.pack()
@@ -665,7 +665,7 @@ class PanelEgresos(ttk.Frame):
     def _abrir_carpeta(ruta):
         import os
         if sys.platform.startswith("win"):
-            os.startfile(str(ruta))
+            os.startfile(str(ruta)) # type: ignore
         elif sys.platform == "darwin":
             os.system(f'open "{ruta}"')
         else:
@@ -882,7 +882,7 @@ class AppEgresos(ttk.Toplevel):
     """
 
     def __init__(self, master=None):
-        super().__init__(master)
+        super().__init__(master) # type: ignore
         self.title("Vet Suite — Egresos")
         self.geometry("1300x880")
         self.minsize(1050, 700)
